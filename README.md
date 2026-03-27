@@ -1,4 +1,4 @@
-(https://github.com/user-attachments/files/26290849/README.md)
+[README.md](https://github.com/user-attachments/files/26290873/README.md)
 # AutoLeaveBlacklistVoice
 
 A [Vencord](https://github.com/Vendicated/Vencord) / [Equicord](https://github.com/Equicord/Equicord) user plugin that automatically disconnects you from voice calls when a blacklisted user is present.
