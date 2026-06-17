@@ -1,0 +1,187 @@
+.vc-albv-container {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 4px;
+}
+
+.vc-albv-section {
+    padding: 16px;
+    border-radius: 10px;
+    background: var(--background-secondary-alt, var(--background-secondary));
+    border: 1px solid var(--background-modifier-accent);
+    transition: border-color .15s ease;
+}
+
+.vc-albv-section:hover {
+    border-color: var(--background-modifier-hover);
+}
+
+.vc-albv-section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.vc-albv-section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--header-primary);
+    flex: 1;
+}
+
+.vc-albv-count {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--white-500, #fff);
+    background: var(--brand-500, var(--brand-experiment, #5865f2));
+}
+
+.vc-albv-section-desc {
+    margin: 0 0 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.vc-albv-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.vc-albv-input-row > :first-child {
+    flex: 1;
+}
+
+.vc-albv-add-btn {
+    flex-shrink: 0;
+}
+
+.vc-albv-error {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-danger, var(--status-danger, #f23f43));
+}
+
+.vc-albv-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.vc-albv-empty {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--text-muted);
+    opacity: .8;
+}
+
+.vc-albv-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    max-width: 100%;
+    padding: 4px 6px 4px 4px;
+    border-radius: 999px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-modifier-accent);
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.vc-albv-chip:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--background-modifier-selected);
+}
+
+.vc-albv-chip-role {
+    padding-left: 10px;
+}
+
+.vc-albv-chip-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.vc-albv-chip-avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--white-500, #fff);
+    background: var(--brand-500, var(--brand-experiment, #5865f2));
+}
+
+.vc-albv-chip-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 2px var(--background-tertiary);
+}
+
+.vc-albv-chip-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.vc-albv-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--interactive-normal);
+    background: transparent;
+    flex-shrink: 0;
+    transition: background .15s ease, color .15s ease;
+}
+
+.vc-albv-chip-remove:hover {
+    color: var(--white-500, #fff);
+    background: var(--status-danger, #f23f43);
+}
+
+.vc-albv-slider-wrap {
+    padding: 6px 10px 0;
+}
+
+/* keep slider marker labels on a single line */
+.vc-albv-slider-wrap [class*="markValue"] {
+    white-space: nowrap;
+}
+
+.vc-albv-hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.vc-albv-hint strong {
+    color: var(--text-normal);
+    font-weight: 600;
+}
