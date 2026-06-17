@@ -59,9 +59,11 @@ Everything is managed from the plugin's custom settings panel:
 
 | Setting | Description |
 |---|---|
-| **Blocked users** | Paste a user ID and click **Add** (or press Enter). Added users show up as chips with their avatar and name. |
-| **Blocked roles** | Paste a role ID to leave whenever a member with that role is in the call. Chips show the role's name and color. |
+| **Blocked users** | Paste one or more user IDs (space- or comma-separated) and click **Add** (or press Enter). Added users show up as chips with their avatar and name. |
+| **Blocked roles** | Paste one or more role IDs to leave whenever a member with that role is in the call. Chips show the role's name and color. |
 | **Leave delay** | Slider (Instant → 10s) controlling how long to wait before leaving. |
+
+> You can paste a whole list of IDs at once — invalid entries and duplicates are skipped automatically.
 
 ### How to find a user or role ID
 
@@ -103,6 +105,7 @@ autoLeaveBlacklistVoice/
 ### 06/17/2026
 - **New:** blacklist by **role ID** — auto-leave when any member with a blacklisted role is in the call
 - **New:** redesigned **settings UI** with chip-based user/role management (resolved avatars, names, and role colors), input validation, and a delay slider
+- **New:** the Add field now accepts **multiple IDs at once** (space-, comma- or newline-separated) — invalid entries and duplicates are skipped, restoring bulk-paste from the UI
 - **Improved:** auto-leave now also re-checks when a blacklisted member moves to another channel
 - **Optimized:** ID lookups now use `Set`-based matching (O(1)), blacklists are parsed once per event, and role resolution is memoized in the UI
 

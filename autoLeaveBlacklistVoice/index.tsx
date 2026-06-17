@@ -338,14 +338,14 @@ const SECTION_CONFIG = {
         key: "blacklistIds" as const,
         title: "Blocked users",
         desc: "You'll automatically leave any call these users are in.",
-        placeholder: "Paste a user ID…",
+        placeholder: "Paste user ID(s) — space or comma separated…",
         empty: "No blocked users yet.",
     },
     roles: {
         key: "blacklistRoleIds" as const,
         title: "Blocked roles",
         desc: "Leave whenever a member with any of these roles is in the call.",
-        placeholder: "Paste a role ID…",
+        placeholder: "Paste role ID(s) — space or comma separated…",
         empty: "No blocked roles yet.",
     },
 };
@@ -366,20 +366,31 @@ function ListSection({ kind }: { kind: "users" | "roles"; }) {
     const [error, setError] = React.useState<string | null>(null);
 
     function commit() {
-        const id = input.trim();
-        if (!id) return;
-        if (!/^\d{5,}$/.test(id)) {
-            setError("That doesn't look like a valid ID (numbers only).");
-            return;
+        // Accept one or many IDs at once — split on whitespace, commas or newlines
+        const tokens = input.split(/[\s,]+/).filter(Boolean);
+        if (tokens.length === 0) return;
+
+        const existing = new Set(list);
+        const toAdd: string[] = [];
+        let invalid = 0;
+
+        for (const token of tokens) {
+            if (!/^\d{5,}$/.test(token)) { invalid++; continue; }
+            if (existing.has(token) || toAdd.includes(token)) continue; // skip duplicates
+            toAdd.push(token);
         }
-        if (list.includes(id)) {
-            setError("That ID is already in the list.");
+
+        if (toAdd.length > 0) {
+            settings.store[config.key] = [...list, ...toAdd].join(" ");
             setInput("");
+            setError(invalid > 0 ? `Added ${toAdd.length}, ignored ${invalid} invalid entr${invalid > 1 ? "ies" : "y"}.` : null);
             return;
         }
-        settings.store[config.key] = [...list, id].join(" ");
-        setInput("");
-        setError(null);
+
+        // Nothing added — explain why (keep the input so it can be fixed)
+        setError(invalid > 0
+            ? "That doesn't look like a valid ID (numbers only)."
+            : "Those IDs are already in the list.");
     }
 
     function remove(id: string) {
