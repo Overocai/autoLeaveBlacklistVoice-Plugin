@@ -129,8 +129,17 @@ function hasBlacklistedUserInChannel(
     return Object.keys(states).some(userId => isUserBlacklisted(userId, guildId, users, roles));
 }
 
-// Pending timeout reference for cleanup
-let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
+// Pending timers for cleanup
+let pendingTimeout: ReturnType<typeof setTimeout> | null = null; // the scheduled leave
+let recheckTimeout: ReturnType<typeof setTimeout> | null = null; // safety re-scan for late-loading member roles
+
+// Helper: clear the safety re-scan timer
+function clearRecheck() {
+    if (recheckTimeout !== null) {
+        clearTimeout(recheckTimeout);
+        recheckTimeout = null;
+    }
+}
 
 // Helper: cancel any pending auto-leave
 function cancelPendingLeave(notify = false) {
@@ -179,38 +188,53 @@ function performLeave(reason: string) {
     });
 }
 
-// Helper: schedule auto-leave with configured delay
+// Helper: schedule auto-leave with the configured delay.
+// The leave always runs from a timer (even when the delay is 0) so we never
+// disconnect in the middle of the Flux dispatch we're reacting to — doing that
+// can throw "Cannot dispatch in the middle of a dispatch", which gets swallowed
+// and leaves us stuck in the call.
 function scheduleLeave(reason: string) {
-    cancelPendingLeave();
+    clearRecheck();
+    if (pendingTimeout !== null) return; // a leave is already scheduled; let it run
 
     const delay = Math.min(Math.max(0, settings.store.delayMs || 0), 10000);
 
-    if (delay === 0) {
-        performLeave(reason);
-        return;
+    if (delay > 0) {
+        Toasts.show({
+            message: `AutoLeave in ${delay}ms: ${reason}`,
+            type: Toasts.Type.MESSAGE,
+            id: Toasts.genId(),
+            options: {
+                duration: delay + 500,
+                position: Toasts.Position.BOTTOM,
+            }
+        });
     }
-
-    Toasts.show({
-        message: `AutoLeave in ${delay}ms: ${reason}`,
-        type: Toasts.Type.MESSAGE,
-        id: Toasts.genId(),
-        options: {
-            duration: delay + 500,
-            position: Toasts.Position.BOTTOM,
-        }
-    });
 
     pendingTimeout = setTimeout(() => {
         pendingTimeout = null;
 
-        // Re-check: still in a call with a blacklisted user?
+        // Re-check on fire: still in a call with a blacklisted user?
         const channelId = getCurrentVoiceChannelId();
-        if (!channelId) return;
-
-        if (hasBlacklistedUserInChannel(channelId)) {
+        if (channelId && hasBlacklistedUserInChannel(channelId)) {
             performLeave(reason);
         }
     }, delay);
+}
+
+// Helper: schedule a one-shot re-scan. A member's roles may not be cached yet
+// the instant they join, so a role-based match can be missed; this re-checks the
+// channel shortly after and only acts if a blacklisted member is actually found.
+function scheduleRecheck() {
+    if (pendingTimeout !== null || recheckTimeout !== null) return;
+
+    recheckTimeout = setTimeout(() => {
+        recheckTimeout = null;
+        const channelId = getCurrentVoiceChannelId();
+        if (channelId && hasBlacklistedUserInChannel(channelId)) {
+            scheduleLeave("Blacklisted member detected");
+        }
+    }, 2500);
 }
 
 // Flux event handler for VOICE_STATE_UPDATES
@@ -226,49 +250,37 @@ function handleVoiceStateUpdate({ voiceStates }: {
         const currentUser = UserStore.getCurrentUser();
         if (!currentUser) return;
 
-        const currentUserId = currentUser.id;
         const users = parseIdSet(settings.store.blacklistIds);
         const roles = parseIdSet(settings.store.blacklistRoleIds);
         if (users.size === 0 && roles.size === 0) return;
 
-        for (const state of voiceStates) {
-            const { userId, channelId, oldChannelId, guildId } = state;
+        // Determine our current channel. Prefer our own state from this batch
+        // (freshest), falling back to the store for events about other users.
+        const ourState = voiceStates.find(s => s.userId === currentUser.id);
+        const ourChannelId = ourState ? ourState.channelId : getCurrentVoiceChannelId();
 
-            // Case 1: WE joined a new voice channel
-            if (userId === currentUserId && channelId && channelId !== oldChannelId) {
-                if (hasBlacklistedUserInChannel(channelId, users, roles)) {
-                    scheduleLeave("Blacklisted user already in the call");
-                } else {
-                    cancelPendingLeave();
-                }
-                return;
-            }
+        // Not in a call -> nothing to do; drop any pending leave/re-scan.
+        if (!ourChannelId) {
+            cancelPendingLeave();
+            clearRecheck();
+            return;
+        }
 
-            // Case 2: WE left a voice channel
-            if (userId === currentUserId && !channelId) {
-                cancelPendingLeave();
-                return;
-            }
+        // Only react if this batch actually involves us or our channel.
+        const relevant = voiceStates.some(s =>
+            s.userId === currentUser.id ||
+            s.channelId === ourChannelId ||
+            s.oldChannelId === ourChannelId
+        );
+        if (!relevant) return;
 
-            // Case 3: another user changed voice state — check ID and role blacklist.
-            // Use the state's guildId, falling back to the channel's guild for role lookups.
-            const effectiveGuildId = guildId ?? getGuildIdForChannel(channelId ?? oldChannelId ?? "");
-            const isBlacklisted = isUserBlacklisted(userId, effectiveGuildId, users, roles);
-            if (!isBlacklisted) continue;
-
-            const ourChannelId = getCurrentVoiceChannelId();
-            if (!ourChannelId) continue; // We are not in a call
-
-            if (channelId === ourChannelId) {
-                // Blacklisted user joined our channel
-                scheduleLeave(`Blacklisted user (${userId}) joined the call`);
-            } else if (oldChannelId === ourChannelId && channelId !== ourChannelId) {
-                // Blacklisted user left our channel (disconnected or moved away)
-                // — cancel only if no other blacklisted member remains
-                if (!hasBlacklistedUserInChannel(ourChannelId, users, roles)) {
-                    cancelPendingLeave(true);
-                }
-            }
+        // Authoritative check: is anyone blacklisted (by ID or role) in our channel right now?
+        if (hasBlacklistedUserInChannel(ourChannelId, users, roles)) {
+            scheduleLeave("Blacklisted user in the call");
+        } else {
+            cancelPendingLeave(pendingTimeout !== null);
+            // A member who just joined may not have their roles cached yet — re-scan soon.
+            if (roles.size > 0) scheduleRecheck();
         }
     } catch (e) {
         console.error("[AutoLeaveBlacklistVoice] Error in voice state handler:", e);
@@ -493,5 +505,6 @@ export default definePlugin({
     stop() {
         FluxDispatcher.unsubscribe("VOICE_STATE_UPDATES", handleVoiceStateUpdate);
         cancelPendingLeave();
+        clearRecheck();
     }
 });
