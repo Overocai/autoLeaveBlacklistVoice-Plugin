@@ -1,6 +1,9 @@
 
 # AutoLeaveBlacklistVoice
 
+> [!WARNING]
+> **Update to the latest version.** Older builds could occasionally fail to leave the call (especially with the leave delay set to `0`). Fixed as of **June 17, 2026** — re-copy the `autoLeaveBlacklistVoice/` folder and rebuild your client mod.
+
 A [Vencord](https://github.com/Vendicated/Vencord) / [Equicord](https://github.com/Equicord/Equicord) user plugin that automatically disconnects you from voice calls when a blacklisted user — **or anyone with a blacklisted role** — is present.
 
 ---
