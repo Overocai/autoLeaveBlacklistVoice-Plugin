@@ -13,7 +13,7 @@ import { ErrorBoundary } from "@components/index";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, React, Slider, TextInput, Toasts, UserStore } from "@webpack/common";
+import { ChannelActions, ChannelStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, React, SelectedChannelStore, Slider, TextInput, Toasts, UserStore } from "@webpack/common";
 
 const cl = classNameFactory("vc-albv-");
 
@@ -68,16 +68,18 @@ function parseIdSet(raw: string): Set<string> {
     return set;
 }
 
-// Helper: get current user's voice channel ID
+// Helper: get the voice channel this client is currently connected to
 function getCurrentVoiceChannelId(): string | null {
     try {
-        const currentUser = UserStore.getCurrentUser();
-        if (!currentUser) return null;
-
-        const voiceState = VoiceStateStore.getVoiceStateForUser(currentUser.id);
-        return voiceState?.channelId ?? null;
+        return SelectedChannelStore.getVoiceChannelId() ?? null;
     } catch {
-        return null;
+        // Fallback for builds where SelectedChannelStore isn't ready yet.
+        try {
+            const currentUser = UserStore.getCurrentUser();
+            return currentUser ? VoiceStateStore.getVoiceStateForUser(currentUser.id)?.channelId ?? null : null;
+        } catch {
+            return null;
+        }
     }
 }
 
@@ -125,8 +127,12 @@ function hasBlacklistedUserInChannel(
     if (!states) return false;
 
     const guildId = getGuildIdForChannel(channelId);
+    const selfId = UserStore.getCurrentUser()?.id;
 
-    return Object.keys(states).some(userId => isUserBlacklisted(userId, guildId, users, roles));
+    // Never count ourselves — blacklisting your own ID/role shouldn't auto-leave you.
+    return Object.keys(states).some(userId =>
+        userId !== selfId && isUserBlacklisted(userId, guildId, users, roles)
+    );
 }
 
 // Pending timers for cleanup
@@ -161,21 +167,32 @@ function cancelPendingLeave(notify = false) {
     }
 }
 
-// Helper: perform the actual disconnect
+// Helper: perform the actual disconnect. Always runs from a timer (see
+// scheduleLeave) so it can safely dispatch without colliding with the Flux
+// dispatch we're reacting to.
 function performLeave(reason: string) {
+    let left = false;
+
+    // Primary: the canonical "leave voice channel" action.
     try {
-        MediaEngineActions.disconnect();
-    } catch {
+        ChannelActions.selectVoiceChannel(null);
+        left = true;
+    } catch (primaryErr) {
+        // Fallbacks for client builds where the action shape differs.
         try {
-            FluxDispatcher.dispatch({
-                type: "VOICE_CHANNEL_SELECT",
-                channelId: null,
-                guildId: null,
-            });
-        } catch (e) {
-            console.error("[AutoLeaveBlacklistVoice] Failed to disconnect:", e);
+            MediaEngineActions.disconnect();
+            left = true;
+        } catch {
+            try {
+                FluxDispatcher.dispatch({ type: "VOICE_CHANNEL_SELECT", channelId: null, guildId: null });
+                left = true;
+            } catch (fallbackErr) {
+                console.error("[AutoLeaveBlacklistVoice] Failed to disconnect:", primaryErr, fallbackErr);
+            }
         }
     }
+
+    if (!left) return;
 
     Toasts.show({
         message: `AutoLeave: ${reason}`,
@@ -258,6 +275,8 @@ function handleVoiceStateUpdate({ voiceStates }: {
     }>;
 }) {
     try {
+        if (!Array.isArray(voiceStates)) return;
+
         const currentUser = UserStore.getCurrentUser();
         if (!currentUser) return;
 
@@ -515,6 +534,16 @@ export default definePlugin({
 
     start() {
         FluxDispatcher.subscribe("VOICE_STATE_UPDATES", handleVoiceStateUpdate);
+
+        // If we're enabled while already sitting in a call with a blacklisted member, act now.
+        try {
+            const channelId = getCurrentVoiceChannelId();
+            if (channelId && hasBlacklistedUserInChannel(channelId)) {
+                scheduleLeave("Blacklisted user in the call");
+            }
+        } catch (e) {
+            console.error("[AutoLeaveBlacklistVoice] Error during start check:", e);
+        }
     },
 
     stop() {

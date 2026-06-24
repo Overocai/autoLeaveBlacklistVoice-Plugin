@@ -110,6 +110,9 @@ autoLeaveBlacklistVoice/
 - **Fixed:** the plugin would sometimes stay in the call instead of leaving (most often with the delay set to 0). It tried to disconnect in the middle of Discord's own voice-state update, which Discord blocks — so the disconnect failed silently and you got stuck in the VC. The leave now always runs a moment later, outside that update, so it disconnects reliably every time.
 - **Improved:** detection now re-scans the whole channel on every relevant change (more reliable than the old per-event checks) and no longer resets the leave countdown on unrelated updates.
 - **Added:** a short safety re-check that catches blacklisted **roles** when a member's roles load a split second late.
+- **Hardened:** disconnect now uses Discord's canonical leave action (with fallbacks) for reliability across client builds; current-channel detection uses `SelectedChannelStore`; malformed voice events are ignored safely.
+- **Fixed:** blacklisting your **own** ID/role no longer kicks you out of every call (you're excluded from the check).
+- **Added:** enabling the plugin while already in a call with a blacklisted member now acts immediately.
 - **New:** blacklist by **role ID** — auto-leave when any member with a blacklisted role is in the call
 - **New:** redesigned **settings UI** with chip-based user/role management (resolved avatars, names, and role colors), input validation, and a delay slider
 - **New:** the Add field now accepts **multiple IDs at once** (space-, comma- or newline-separated) — invalid entries and duplicates are skipped, restoring bulk-paste from the UI
