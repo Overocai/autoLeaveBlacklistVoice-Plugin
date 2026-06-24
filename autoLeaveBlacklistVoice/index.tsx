@@ -218,6 +218,17 @@ function scheduleLeave(reason: string) {
         const channelId = getCurrentVoiceChannelId();
         if (channelId && hasBlacklistedUserInChannel(channelId)) {
             performLeave(reason);
+        } else if (delay > 0) {
+            // They left before the timer fired — let the user know the leave was aborted.
+            Toasts.show({
+                message: "AutoLeave cancelled: blacklisted user is no longer in the call",
+                type: Toasts.Type.MESSAGE,
+                id: Toasts.genId(),
+                options: {
+                    duration: 2000,
+                    position: Toasts.Position.BOTTOM,
+                }
+            });
         }
     }, delay);
 }
@@ -276,11 +287,15 @@ function handleVoiceStateUpdate({ voiceStates }: {
 
         // Authoritative check: is anyone blacklisted (by ID or role) in our channel right now?
         if (hasBlacklistedUserInChannel(ourChannelId, users, roles)) {
+            // Someone blacklisted is here — schedule the leave (no-op if already scheduled).
             scheduleLeave("Blacklisted user in the call");
-        } else {
-            cancelPendingLeave(pendingTimeout !== null);
-            // A member who just joined may not have their roles cached yet — re-scan soon.
-            if (roles.size > 0) scheduleRecheck();
+        } else if (pendingTimeout === null && roles.size > 0) {
+            // Nobody matched right now. A member who just joined may not have their roles
+            // cached yet, so re-scan shortly. We deliberately do NOT cancel an
+            // already-scheduled leave on a negative check: the scheduled leave re-checks
+            // before disconnecting, so a transient miss (e.g. uncached roles) can't abort
+            // a valid leave — that bug left users stuck in the call.
+            scheduleRecheck();
         }
     } catch (e) {
         console.error("[AutoLeaveBlacklistVoice] Error in voice state handler:", e);

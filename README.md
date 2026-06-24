@@ -106,6 +106,7 @@ autoLeaveBlacklistVoice/
 ## Changelog
 
 ### June 23, 2026
+- **Fixed:** with a non-zero leave delay the countdown could show ("leaving in 2000ms…") but never actually disconnect. A transient detection miss during the countdown — e.g. a member's roles loading a moment late — was cancelling the pending leave. A scheduled leave is no longer cancelled by a transient check; it simply re-checks once when the timer fires.
 - **Fixed:** the plugin would sometimes stay in the call instead of leaving (most often with the delay set to 0). It tried to disconnect in the middle of Discord's own voice-state update, which Discord blocks — so the disconnect failed silently and you got stuck in the VC. The leave now always runs a moment later, outside that update, so it disconnects reliably every time.
 - **Improved:** detection now re-scans the whole channel on every relevant change (more reliable than the old per-event checks) and no longer resets the leave countdown on unrelated updates.
 - **Added:** a short safety re-check that catches blacklisted **roles** when a member's roles load a split second late.
