@@ -8,12 +8,11 @@ import "./styles.css";
 
 import { definePluginSettings } from "@api/Settings";
 import { Button } from "@components/Button";
-import { Card } from "@components/Card";
 import { ErrorBoundary } from "@components/index";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelActions, ChannelStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, React, SelectedChannelStore, Slider, TextInput, Toasts, UserStore } from "@webpack/common";
+import { ChannelActions, ChannelStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, React, SelectedChannelStore, Slider, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
 
 const cl = classNameFactory("vc-albv-");
 
@@ -415,19 +414,21 @@ function RoleChip({ id, onRemove }: { id: string; onRemove: () => void; }) {
 const SECTION_CONFIG = {
     users: {
         key: "blacklistIds" as const,
-        title: "Blocked users",
-        desc: "You'll automatically leave any call these users are in.",
+        noun: "user",
         placeholder: "Paste user ID(s) — space or comma separated…",
-        empty: "No blocked users yet.",
+        empty: "No blocked users yet. Paste an ID above to get started.",
     },
     roles: {
         key: "blacklistRoleIds" as const,
-        title: "Blocked roles",
-        desc: "Leave whenever a member with any of these roles is in the call.",
+        noun: "role",
         placeholder: "Paste role ID(s) — space or comma separated…",
-        empty: "No blocked roles yet.",
+        empty: "No blocked roles yet. Paste a role ID above to get started.",
     },
 };
+
+type Kind = keyof typeof SECTION_CONFIG;
+
+const DELAY_PRESETS = [0, 1000, 2000, 3000, 5000, 10000];
 
 // Format a delay value (ms) as a short label
 function formatDelay(ms: number, instant = false): string {
@@ -435,11 +436,61 @@ function formatDelay(ms: number, instant = false): string {
     return ms % 1000 === 0 ? `${ms / 1000}s` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-function ListSection({ kind }: { kind: "users" | "roles"; }) {
+// ── Header with live connection status ──
+function StatusPill() {
+    const channelId = useStateFromStores([SelectedChannelStore], () => SelectedChannelStore.getVoiceChannelId());
+    const inCall = !!channelId;
+
+    return (
+        <span className={cl("status", inCall && "status-on")}>
+            <span className={cl("status-dot")} />
+            {inCall ? "In a call" : "Watching"}
+        </span>
+    );
+}
+
+function Header() {
+    return (
+        <div className={cl("header")}>
+            <div className={cl("logo")}>
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+                    <path d="M12 3 5 6v5.5c0 4.3 2.9 7.4 7 8.5 4.1-1.1 7-4.2 7-8.5V6l-7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                    <path d="m9.5 9.5 5 5m0-5-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+            </div>
+            <div className={cl("header-text")}>
+                <div className={cl("header-title")}>AutoLeaveBlacklistVoice</div>
+                <div className={cl("header-sub")}>Auto-leave calls when a blocked user or role shows up</div>
+            </div>
+            <StatusPill />
+        </div>
+    );
+}
+
+// ── Users / Roles tab switch ──
+function Tabs({ tab, setTab, userCount, roleCount }: {
+    tab: Kind; setTab: (k: Kind) => void; userCount: number; roleCount: number;
+}) {
+    const tabBtn = (k: Kind, label: string, count: number) => (
+        <button className={cl("tab", tab === k && "tab-on")} onClick={() => setTab(k)}>
+            <span>{label}</span>
+            <span className={cl("tab-count")}>{count}</span>
+        </button>
+    );
+
+    return (
+        <div className={cl("tabs")}>
+            {tabBtn("users", "Users", userCount)}
+            {tabBtn("roles", "Roles", roleCount)}
+        </div>
+    );
+}
+
+// ── Add box + chip list for the active tab ──
+function ListManager({ kind }: { kind: Kind; }) {
     const config = SECTION_CONFIG[kind];
     const store = settings.use([config.key]);
-    const raw = (store[config.key] as string) ?? "";
-    const list = parseList(raw);
+    const list = parseList((store[config.key] as string) ?? "");
 
     const [input, setInput] = React.useState("");
     const [error, setError] = React.useState<string | null>(null);
@@ -466,7 +517,6 @@ function ListSection({ kind }: { kind: "users" | "roles"; }) {
             return;
         }
 
-        // Nothing added — explain why (keep the input so it can be fixed)
         setError(invalid > 0
             ? "That doesn't look like a valid ID (numbers only)."
             : "Those IDs are already in the list.");
@@ -482,16 +532,7 @@ function ListSection({ kind }: { kind: "users" | "roles"; }) {
     }
 
     return (
-        <Card className={cl("section")}>
-            <div className={cl("section-header")}>
-                <span className={cl("section-title")}>{config.title}</span>
-                <span className={cl("count")}>{list.length}</span>
-                {list.length > 0 && (
-                    <button className={cl("clear-btn")} onClick={clearAll}>Clear all</button>
-                )}
-            </div>
-            <p className={cl("section-desc")}>{config.desc}</p>
-
+        <div className={cl("manager")}>
             <div className={cl("input-row")}>
                 <TextInput
                     type="text"
@@ -514,33 +555,56 @@ function ListSection({ kind }: { kind: "users" | "roles"; }) {
 
             {error && <span className={cl("error")}>{error}</span>}
 
+            <div className={cl("list-head")}>
+                <span className={cl("list-count")}>
+                    {list.length} {config.noun}{list.length === 1 ? "" : "s"} blocked
+                </span>
+                {list.length > 0 && (
+                    <button className={cl("clear-btn")} onClick={clearAll}>Clear all</button>
+                )}
+            </div>
+
             <div className={cl("chips")}>
                 {list.length === 0
-                    ? <span className={cl("empty")}>{config.empty}</span>
+                    ? <div className={cl("empty")}>{config.empty}</div>
                     : list.map(id => kind === "users"
                         ? <UserChip key={id} id={id} onRemove={() => remove(id)} />
                         : <RoleChip key={id} id={id} onRemove={() => remove(id)} />)}
             </div>
-        </Card>
+        </div>
     );
 }
 
-function DelaySection() {
+// ── Delay control: slider + quick presets (kept in sync) ──
+function DelayCard() {
     const store = settings.use(["delayMs"]);
+    const value = store.delayMs ?? 0;
+
+    // Bump this to force the slider to re-mount when a preset sets a new value
+    // (the slider only reads initialValue on mount). Dragging never bumps it,
+    // so live dragging stays smooth.
+    const [presetVersion, setPresetVersion] = React.useState(0);
+
+    function setDelay(ms: number) {
+        settings.store.delayMs = ms;
+        setPresetVersion(v => v + 1);
+    }
 
     return (
-        <Card className={cl("section")}>
-            <div className={cl("section-header")}>
-                <span className={cl("section-title")}>Leave delay</span>
-                <span className={cl("count")}>{formatDelay(store.delayMs ?? 0, true)}</span>
+        <div className={cl("card")}>
+            <div className={cl("card-head")}>
+                <span className={cl("card-title")}>Leave delay</span>
+                <span className={cl("badge")}>{formatDelay(value, true)}</span>
             </div>
-            <p className={cl("section-desc")}>
-                Wait this long before leaving. If everyone blocked leaves first, the auto-leave is cancelled.
+            <p className={cl("card-desc")}>
+                Wait before leaving. If everyone blocked leaves first, the auto-leave is cancelled.
             </p>
+
             <div className={cl("slider-wrap")}>
                 <Slider
+                    key={presetVersion}
                     markers={[0, 1000, 2000, 3000, 5000, 7500, 10000]}
-                    initialValue={store.delayMs ?? 0}
+                    initialValue={value}
                     minValue={0}
                     maxValue={10000}
                     onValueChange={(v: number) => settings.store.delayMs = Math.round(v)}
@@ -549,16 +613,34 @@ function DelaySection() {
                     stickToMarkers
                 />
             </div>
-        </Card>
+
+            <div className={cl("presets")}>
+                {DELAY_PRESETS.map(ms => (
+                    <button
+                        key={ms}
+                        className={cl("preset", value === ms && "preset-on")}
+                        onClick={() => setDelay(ms)}
+                    >
+                        {formatDelay(ms, true)}
+                    </button>
+                ))}
+            </div>
+        </div>
     );
 }
 
 function SettingsPanel() {
+    const [tab, setTab] = React.useState<Kind>("users");
+    const store = settings.use(["blacklistIds", "blacklistRoleIds"]);
+    const userCount = parseList(store.blacklistIds ?? "").length;
+    const roleCount = parseList(store.blacklistRoleIds ?? "").length;
+
     return (
-        <div className={cl("container")}>
-            <ListSection kind="users" />
-            <ListSection kind="roles" />
-            <DelaySection />
+        <div className={cl("panel")}>
+            <Header />
+            <Tabs tab={tab} setTab={setTab} userCount={userCount} roleCount={roleCount} />
+            <ListManager key={tab} kind={tab} />
+            <DelayCard />
 
             <p className={cl("hint")}>
                 Tip: enable <strong>Developer Mode</strong> (Settings → Advanced), then right-click a

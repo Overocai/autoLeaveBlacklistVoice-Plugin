@@ -1,73 +1,160 @@
-.vc-albv-container {
+.vc-albv-panel {
     display: flex;
     flex-direction: column;
     gap: 14px;
     margin-top: 4px;
+    --albv-accent: var(--brand-500, var(--brand-experiment, #5865f2));
 }
 
-.vc-albv-section {
-    padding: 16px;
-    border-radius: 10px;
-    background: var(--background-secondary-alt, var(--background-secondary));
-    border: 1px solid var(--background-modifier-accent);
-    transition: border-color .15s ease;
-}
+/* ───────────────────────── Header ───────────────────────── */
 
-.vc-albv-section:hover {
-    border-color: var(--background-modifier-hover);
-}
-
-.vc-albv-section-header {
+.vc-albv-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background:
+        radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--albv-accent) 22%, transparent), transparent 60%),
+        var(--background-secondary-alt, var(--background-secondary));
+    border: 1px solid var(--background-modifier-accent);
 }
 
-.vc-albv-section-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--header-primary);
+.vc-albv-logo {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--albv-accent), color-mix(in srgb, var(--albv-accent) 55%, #000));
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--albv-accent) 45%, transparent);
+}
+
+.vc-albv-header-text {
     flex: 1;
+    min-width: 0;
 }
 
-.vc-albv-count {
-    min-width: 22px;
-    height: 22px;
-    padding: 0 7px;
+.vc-albv-header-title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--header-primary);
+    letter-spacing: .2px;
+}
+
+.vc-albv-header-sub {
+    margin-top: 2px;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--text-muted);
+}
+
+.vc-albv-status {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-modifier-accent);
+}
+
+.vc-albv-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.vc-albv-status-on {
+    color: var(--text-positive, #2dc770);
+    background: color-mix(in srgb, var(--text-positive, #2dc770) 14%, transparent);
+    border-color: color-mix(in srgb, var(--text-positive, #2dc770) 35%, transparent);
+}
+
+.vc-albv-status-on .vc-albv-status-dot {
+    background: var(--text-positive, #2dc770);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-positive, #2dc770) 25%, transparent);
+}
+
+/* ───────────────────────── Tabs ───────────────────────── */
+
+.vc-albv-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 5px;
+    border-radius: 12px;
+    background: var(--background-tertiary);
+    border: 1px solid var(--background-modifier-accent);
+}
+
+.vc-albv-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 9px 12px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--interactive-normal);
+    background: transparent;
+    transition: background .15s ease, color .15s ease;
+}
+
+.vc-albv-tab:hover {
+    color: var(--interactive-hover);
+    background: var(--background-modifier-hover);
+}
+
+.vc-albv-tab-on {
+    color: #fff;
+    background: var(--albv-accent);
+}
+
+.vc-albv-tab-on:hover {
+    color: #fff;
+    background: var(--albv-accent);
+    filter: brightness(1.05);
+}
+
+.vc-albv-tab-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 11px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--white-500, #fff);
-    background: var(--brand-500, var(--brand-experiment, #5865f2));
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--header-primary);
+    background: var(--background-secondary);
 }
 
-.vc-albv-clear-btn {
-    margin-left: 4px;
-    padding: 2px 8px;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    color: var(--text-muted);
-    background: transparent;
-    transition: color .15s ease, background .15s ease;
+.vc-albv-tab-on .vc-albv-tab-count {
+    color: var(--albv-accent);
+    background: #fff;
 }
 
-.vc-albv-clear-btn:hover {
-    color: var(--white-500, #fff);
-    background: var(--status-danger, #f23f43);
-}
+/* ───────────────────── Cards / manager ───────────────────── */
 
-.vc-albv-section-desc {
-    margin: 0 0 12px;
-    font-size: 13px;
-    line-height: 1.4;
-    color: var(--text-muted);
+.vc-albv-manager,
+.vc-albv-card {
+    padding: 16px;
+    border-radius: 14px;
+    background: var(--background-secondary-alt, var(--background-secondary));
+    border: 1px solid var(--background-modifier-accent);
 }
 
 .vc-albv-input-row {
@@ -92,12 +179,47 @@
     color: var(--text-danger, var(--status-danger, #f23f43));
 }
 
+.vc-albv-list-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 14px 0 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-accent);
+}
+
+.vc-albv-list-count {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: var(--text-muted);
+}
+
+.vc-albv-clear-btn {
+    padding: 3px 10px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+    background: transparent;
+    transition: color .15s ease, background .15s ease;
+}
+
+.vc-albv-clear-btn:hover {
+    color: #fff;
+    background: var(--status-danger, #f23f43);
+}
+
+/* ───────────────────────── Chips ───────────────────────── */
+
 .vc-albv-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 12px;
-    max-height: 172px;
+    max-height: 184px;
     overflow-y: auto;
     padding-right: 2px;
 }
@@ -116,10 +238,13 @@
 }
 
 .vc-albv-empty {
+    width: 100%;
+    padding: 18px;
+    text-align: center;
     font-size: 13px;
-    font-style: italic;
     color: var(--text-muted);
-    opacity: .8;
+    border: 1px dashed var(--background-modifier-accent);
+    border-radius: 10px;
 }
 
 .vc-albv-chip {
@@ -157,8 +282,8 @@
     justify-content: center;
     font-size: 11px;
     font-weight: 700;
-    color: var(--white-500, #fff);
-    background: var(--brand-500, var(--brand-experiment, #5865f2));
+    color: #fff;
+    background: var(--albv-accent);
 }
 
 .vc-albv-chip-dot {
@@ -195,21 +320,93 @@
 }
 
 .vc-albv-chip-remove:hover {
-    color: var(--white-500, #fff);
+    color: #fff;
     background: var(--status-danger, #f23f43);
+}
+
+/* ───────────────────────── Delay ───────────────────────── */
+
+.vc-albv-card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.vc-albv-card-title {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--header-primary);
+}
+
+.vc-albv-badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+    color: #fff;
+    background: var(--albv-accent);
+}
+
+.vc-albv-card-desc {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-muted);
 }
 
 .vc-albv-slider-wrap {
     padding: 6px 10px 0;
 }
 
-/* keep slider marker labels on a single line */
 .vc-albv-slider-wrap [class*="markValue"] {
     white-space: nowrap;
 }
 
+.vc-albv-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+}
+
+.vc-albv-preset {
+    flex: 1;
+    min-width: 56px;
+    padding: 7px 6px;
+    border: 1px solid var(--background-modifier-accent);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--interactive-normal);
+    background: var(--background-tertiary);
+    transition: all .15s ease;
+}
+
+.vc-albv-preset:hover {
+    color: var(--interactive-hover);
+    background: var(--background-modifier-hover);
+}
+
+.vc-albv-preset-on {
+    color: #fff;
+    background: var(--albv-accent);
+    border-color: var(--albv-accent);
+}
+
+.vc-albv-preset-on:hover {
+    color: #fff;
+    background: var(--albv-accent);
+    filter: brightness(1.05);
+}
+
+/* ───────────────────────── Footer ───────────────────────── */
+
 .vc-albv-hint {
     margin: 0;
+    padding: 0 2px;
     font-size: 12px;
     line-height: 1.5;
     color: var(--text-muted);
