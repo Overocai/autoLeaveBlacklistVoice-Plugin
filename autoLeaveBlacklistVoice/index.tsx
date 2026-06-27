@@ -12,7 +12,7 @@ import { ErrorBoundary } from "@components/index";
 import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByPropsLazy } from "@webpack";
-import { ChannelActions, ChannelStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, React, SelectedChannelStore, Slider, TextInput, Toasts, UserStore, useStateFromStores } from "@webpack/common";
+import { ChannelActions, ChannelStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, React, SelectedChannelStore, Slider, TextInput, Toasts, UserStore } from "@webpack/common";
 
 const cl = classNameFactory("vc-albv-");
 
@@ -45,12 +45,19 @@ const settings = definePluginSettings({
         default: 0,
         description: "Delay in milliseconds before leaving the call (0 = instant, max: 10000)",
         restartNeeded: false,
+    },
+    activityLog: {
+        type: OptionType.STRING,
+        default: "",
+        description: "internal: recent auto-leave activity",
+        restartNeeded: false,
     }
 }, {
     // The raw values are managed by the custom panel above, so hide the plain inputs.
     blacklistIds: { hidden() { return true; } },
     blacklistRoleIds: { hidden() { return true; } },
     delayMs: { hidden() { return true; } },
+    activityLog: { hidden() { return true; } },
 });
 
 // Helper: parse a space-separated ID list (preserves order; used by the settings UI)
@@ -135,6 +142,65 @@ function hasBlacklistedUserInChannel(
     );
 }
 
+// ── Activity log ──────────────────────────────────────────
+interface LogEntry { ids: string[]; names: string[]; channel: string | null; time: number; }
+
+const MAX_LOG = 25;
+
+// Resolve a user's display name (falls back to the raw ID if not cached)
+function displayName(id: string): string {
+    try { return UserStore.getUser(id)?.username ?? id; }
+    catch { return id; }
+}
+
+// Find the blacklisted members currently in a channel (returns their user IDs)
+function findBlacklistedMembers(channelId: string): string[] {
+    const users = parseIdSet(settings.store.blacklistIds);
+    const roles = parseIdSet(settings.store.blacklistRoleIds);
+    if (users.size === 0 && roles.size === 0) return [];
+
+    let states: Record<string, unknown>;
+    try { states = VoiceStateStore.getVoiceStatesForChannel(channelId); }
+    catch { return []; }
+    if (!states) return [];
+
+    const guildId = getGuildIdForChannel(channelId);
+    const selfId = UserStore.getCurrentUser()?.id;
+    return Object.keys(states).filter(uid => uid !== selfId && isUserBlacklisted(uid, guildId, users, roles));
+}
+
+function readLog(): LogEntry[] {
+    try {
+        const parsed = JSON.parse(settings.store.activityLog || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+// Record an auto-leave (who was in the call), keeping only the most recent entries
+function logTrigger(channelId: string, ids: string[]) {
+    if (ids.length === 0) return;
+
+    let channel: string | null = null;
+    try { channel = ChannelStore.getChannel(channelId)?.name ?? null; }
+    catch { /* ignore */ }
+
+    const entry: LogEntry = { ids, names: ids.map(displayName), channel, time: Date.now() };
+    settings.store.activityLog = JSON.stringify([entry, ...readLog()].slice(0, MAX_LOG));
+}
+
+// Human-friendly relative time
+function timeAgo(ts: number): string {
+    const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return "just now";
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+}
+
 // How often to re-scan the channel while connected. This is the safety net for
 // voice events that never fire and for member roles that load after someone joins.
 const POLL_INTERVAL_MS = 3000;
@@ -175,6 +241,10 @@ function cancelPendingLeave(notify = false) {
 // scheduleLeave) so it can safely dispatch without colliding with the Flux
 // dispatch we're reacting to.
 function performLeave(reason: string) {
+    // Capture who triggered this *before* we disconnect and drop out of the channel.
+    const channelId = getCurrentVoiceChannelId();
+    const triggers = channelId ? findBlacklistedMembers(channelId) : [];
+
     let left = false;
 
     // Primary: the canonical "leave voice channel" action.
@@ -198,8 +268,11 @@ function performLeave(reason: string) {
 
     if (!left) return;
 
+    if (channelId && triggers.length) logTrigger(channelId, triggers);
+
+    const who = triggers.map(displayName).join(", ");
     Toasts.show({
-        message: `AutoLeave: ${reason}`,
+        message: who ? `AutoLeave: left because of ${who}` : `AutoLeave: ${reason}`,
         type: Toasts.Type.MESSAGE,
         id: Toasts.genId(),
         options: {
@@ -436,37 +509,6 @@ function formatDelay(ms: number, instant = false): string {
     return ms % 1000 === 0 ? `${ms / 1000}s` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-// ── Header with live connection status ──
-function StatusPill() {
-    const channelId = useStateFromStores([SelectedChannelStore], () => SelectedChannelStore.getVoiceChannelId());
-    const inCall = !!channelId;
-
-    return (
-        <span className={cl("status", inCall && "status-on")}>
-            <span className={cl("status-dot")} />
-            {inCall ? "In a call" : "Watching"}
-        </span>
-    );
-}
-
-function Header() {
-    return (
-        <div className={cl("header")}>
-            <div className={cl("logo")}>
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
-                    <path d="M12 3 5 6v5.5c0 4.3 2.9 7.4 7 8.5 4.1-1.1 7-4.2 7-8.5V6l-7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                    <path d="m9.5 9.5 5 5m0-5-5 5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-                </svg>
-            </div>
-            <div className={cl("header-text")}>
-                <div className={cl("header-title")}>AutoLeaveBlacklistVoice</div>
-                <div className={cl("header-sub")}>Auto-leave calls when a blocked user or role shows up</div>
-            </div>
-            <StatusPill />
-        </div>
-    );
-}
-
 // ── Users / Roles tab switch ──
 function Tabs({ tab, setTab, userCount, roleCount }: {
     tab: Kind; setTab: (k: Kind) => void; userCount: number; roleCount: number;
@@ -629,6 +671,46 @@ function DelayCard() {
     );
 }
 
+// ── Recent activity log (who was in the call when we auto-left) ──
+function ActivityLog() {
+    const store = settings.use(["activityLog"]);
+    const log = React.useMemo<LogEntry[]>(() => {
+        try {
+            const parsed = JSON.parse(store.activityLog || "[]");
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }, [store.activityLog]);
+
+    return (
+        <div className={cl("card")}>
+            <div className={cl("card-head")}>
+                <span className={cl("card-title")}>Recent activity</span>
+                {log.length > 0 && (
+                    <button className={cl("clear-btn")} onClick={() => settings.store.activityLog = ""}>Clear</button>
+                )}
+            </div>
+
+            {log.length === 0
+                ? <div className={cl("empty")}>No auto-leaves logged yet.</div>
+                : (
+                    <div className={cl("log")}>
+                        {log.map((e, i) => (
+                            <div className={cl("log-row")} key={`${e.time}-${i}`}>
+                                <span className={cl("log-dot")} />
+                                <span className={cl("log-text")}>
+                                    Left {e.channel ? <strong>{e.channel}</strong> : "a call"} — {e.names.join(", ")}
+                                </span>
+                                <span className={cl("log-time")}>{timeAgo(e.time)}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+        </div>
+    );
+}
+
 function SettingsPanel() {
     const [tab, setTab] = React.useState<Kind>("users");
     const store = settings.use(["blacklistIds", "blacklistRoleIds"]);
@@ -637,10 +719,10 @@ function SettingsPanel() {
 
     return (
         <div className={cl("panel")}>
-            <Header />
             <Tabs tab={tab} setTab={setTab} userCount={userCount} roleCount={roleCount} />
             <ListManager key={tab} kind={tab} />
             <DelayCard />
+            <ActivityLog />
 
             <p className={cl("hint")}>
                 Tip: enable <strong>Developer Mode</strong> (Settings → Advanced), then right-click a

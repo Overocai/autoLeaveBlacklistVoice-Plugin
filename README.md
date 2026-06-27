@@ -107,7 +107,8 @@ autoLeaveBlacklistVoice/
 
 ### June 25, 2026
 - **Fixed (important):** joining a call where a member with a blacklisted **role** was already present could fail to auto-leave — it would only "wake up" once some other voice event happened to fire. The plugin now re-scans on a short timer while you're connected and actively fetches members whose roles aren't cached yet, so role-based matches are caught reliably even in large servers (where member data loads lazily).
-- **UI:** complete redesign of the settings panel — a header with **live call status** (in a call / watching), **Users / Roles tabs** with live counts, scrollable chip lists (avatars for users, role colors for roles), a delay control with both a **slider and quick presets**, and a **Clear all** button per list.
+- **UI:** complete redesign of the settings panel — **Users / Roles tabs** with live counts, scrollable chip lists (avatars for users, role colors for roles), a delay control with both a **slider and quick presets**, and a **Clear all** button per list.
+- **New:** a **Recent activity** log that records who was in the call each time the plugin auto-leaves (with the channel name and a relative time), so you can see what triggered it. The leave toast now also names the blocked member.
 
 ### June 24, 2026
 - **Fixed:** with a non-zero leave delay the countdown could show ("leaving in 2000ms…") but never actually disconnect. A transient detection miss during the countdown — e.g. a member's roles loading a moment late — was cancelling the pending leave. A scheduled leave is no longer cancelled by a transient check; it simply re-checks once when the timer fires.
