@@ -20,6 +20,7 @@ const cl = classNameFactory("vc-albv-");
 // Stores and actions loaded lazily
 const VoiceStateStore = findByPropsLazy("getVoiceStateForUser", "getVoiceStatesForChannel");
 const MediaEngineActions = findByPropsLazy("disconnect", "setChannel");
+const GuildActions = findByPropsLazy("requestMembersById", "banUser");
 
 // Settings definition
 const settings = definePluginSettings({
@@ -135,15 +136,19 @@ function hasBlacklistedUserInChannel(
     );
 }
 
-// Pending timers for cleanup
-let pendingTimeout: ReturnType<typeof setTimeout> | null = null; // the scheduled leave
-let recheckTimeout: ReturnType<typeof setTimeout> | null = null; // safety re-scan for late-loading member roles
+// How often to re-scan the channel while connected. This is the safety net for
+// voice events that never fire and for member roles that load after someone joins.
+const POLL_INTERVAL_MS = 3000;
 
-// Helper: clear the safety re-scan timer
-function clearRecheck() {
-    if (recheckTimeout !== null) {
-        clearTimeout(recheckTimeout);
-        recheckTimeout = null;
+// Timers for cleanup
+let pendingTimeout: ReturnType<typeof setTimeout> | null = null; // the scheduled leave
+let pollInterval: ReturnType<typeof setInterval> | null = null; // periodic channel re-scan while in a call
+
+// Helper: stop the periodic re-scan
+function stopPolling() {
+    if (pollInterval !== null) {
+        clearInterval(pollInterval);
+        pollInterval = null;
     }
 }
 
@@ -211,7 +216,6 @@ function performLeave(reason: string) {
 // can throw "Cannot dispatch in the middle of a dispatch", which gets swallowed
 // and leaves us stuck in the call.
 function scheduleLeave(reason: string) {
-    clearRecheck();
     if (pendingTimeout !== null) return; // a leave is already scheduled; let it run
 
     const delay = Math.min(Math.max(0, settings.store.delayMs || 0), 10000);
@@ -250,19 +254,52 @@ function scheduleLeave(reason: string) {
     }, delay);
 }
 
-// Helper: schedule a one-shot re-scan. A member's roles may not be cached yet
-// the instant they join, so a role-based match can be missed; this re-checks the
-// channel shortly after and only acts if a blacklisted member is actually found.
-function scheduleRecheck() {
-    if (pendingTimeout !== null || recheckTimeout !== null) return;
+// Request guild members whose data isn't cached yet so their roles populate the
+// GuildMemberStore for the next scan. Without this, a role-based match can be
+// permanently missed in large servers where members aren't loaded automatically.
+function requestUncachedMembers(channelId: string, guildId: string | null) {
+    if (!guildId) return;
 
-    recheckTimeout = setTimeout(() => {
-        recheckTimeout = null;
-        const channelId = getCurrentVoiceChannelId();
-        if (channelId && hasBlacklistedUserInChannel(channelId)) {
-            scheduleLeave("Blacklisted member detected");
+    try {
+        const states = VoiceStateStore.getVoiceStatesForChannel(channelId);
+        if (!states) return;
+
+        const selfId = UserStore.getCurrentUser()?.id;
+        const missing = Object.keys(states).filter(uid => uid !== selfId && !GuildMemberStore.getMember(guildId, uid));
+        if (missing.length) GuildActions.requestMembersById(guildId, missing, false);
+    } catch { /* ignore */ }
+}
+
+// Single decision point: leave if a blacklisted member is present, otherwise make
+// sure any uncached members get fetched so the next scan can see their roles.
+function evaluateChannel(channelId: string, users: Set<string>, roles: Set<string>) {
+    if (hasBlacklistedUserInChannel(channelId, users, roles)) {
+        scheduleLeave("Blacklisted user in the call");
+    } else if (roles.size > 0) {
+        requestUncachedMembers(channelId, getGuildIdForChannel(channelId));
+    }
+}
+
+// Start the periodic re-scan (no-op if already running). The safety net: it catches
+// blacklisted members even when no voice event fires for them and even when their
+// roles only load seconds after they join.
+function startPolling() {
+    if (pollInterval !== null) return;
+
+    pollInterval = setInterval(() => {
+        try {
+            const channelId = getCurrentVoiceChannelId();
+            if (!channelId) { stopPolling(); return; }
+
+            const users = parseIdSet(settings.store.blacklistIds);
+            const roles = parseIdSet(settings.store.blacklistRoleIds);
+            if (users.size === 0 && roles.size === 0) { stopPolling(); return; }
+
+            evaluateChannel(channelId, users, roles);
+        } catch (e) {
+            console.error("[AutoLeaveBlacklistVoice] Poll error:", e);
         }
-    }, 2500);
+    }, POLL_INTERVAL_MS);
 }
 
 // Flux event handler for VOICE_STATE_UPDATES
@@ -282,21 +319,24 @@ function handleVoiceStateUpdate({ voiceStates }: {
 
         const users = parseIdSet(settings.store.blacklistIds);
         const roles = parseIdSet(settings.store.blacklistRoleIds);
-        if (users.size === 0 && roles.size === 0) return;
+        if (users.size === 0 && roles.size === 0) { stopPolling(); return; }
 
         // Determine our current channel. Prefer our own state from this batch
         // (freshest), falling back to the store for events about other users.
         const ourState = voiceStates.find(s => s.userId === currentUser.id);
         const ourChannelId = ourState ? ourState.channelId : getCurrentVoiceChannelId();
 
-        // Not in a call -> nothing to do; drop any pending leave/re-scan.
+        // Not in a call -> nothing to do; drop any pending leave and stop polling.
         if (!ourChannelId) {
             cancelPendingLeave();
-            clearRecheck();
+            stopPolling();
             return;
         }
 
-        // Only react if this batch actually involves us or our channel.
+        // We're in a call with blacklists configured — keep the safety poll running.
+        startPolling();
+
+        // Only react immediately if this batch actually involves us or our channel.
         const relevant = voiceStates.some(s =>
             s.userId === currentUser.id ||
             s.channelId === ourChannelId ||
@@ -304,18 +344,11 @@ function handleVoiceStateUpdate({ voiceStates }: {
         );
         if (!relevant) return;
 
-        // Authoritative check: is anyone blacklisted (by ID or role) in our channel right now?
-        if (hasBlacklistedUserInChannel(ourChannelId, users, roles)) {
-            // Someone blacklisted is here — schedule the leave (no-op if already scheduled).
-            scheduleLeave("Blacklisted user in the call");
-        } else if (pendingTimeout === null && roles.size > 0) {
-            // Nobody matched right now. A member who just joined may not have their roles
-            // cached yet, so re-scan shortly. We deliberately do NOT cancel an
-            // already-scheduled leave on a negative check: the scheduled leave re-checks
-            // before disconnecting, so a transient miss (e.g. uncached roles) can't abort
-            // a valid leave — that bug left users stuck in the call.
-            scheduleRecheck();
-        }
+        // Leave if a blacklisted member is present; otherwise fetch uncached members
+        // so the next scan/poll can see their roles. We never cancel an already
+        // scheduled leave here — the leave re-checks before disconnecting, so a
+        // transient miss (e.g. uncached roles) can't abort a valid leave.
+        evaluateChannel(ourChannelId, users, roles);
     } catch (e) {
         console.error("[AutoLeaveBlacklistVoice] Error in voice state handler:", e);
     }
@@ -443,11 +476,19 @@ function ListSection({ kind }: { kind: "users" | "roles"; }) {
         settings.store[config.key] = list.filter(x => x !== id).join(" ");
     }
 
+    function clearAll() {
+        settings.store[config.key] = "";
+        setError(null);
+    }
+
     return (
         <Card className={cl("section")}>
             <div className={cl("section-header")}>
                 <span className={cl("section-title")}>{config.title}</span>
                 <span className={cl("count")}>{list.length}</span>
+                {list.length > 0 && (
+                    <button className={cl("clear-btn")} onClick={clearAll}>Clear all</button>
+                )}
             </div>
             <p className={cl("section-desc")}>{config.desc}</p>
 
@@ -491,6 +532,7 @@ function DelaySection() {
         <Card className={cl("section")}>
             <div className={cl("section-header")}>
                 <span className={cl("section-title")}>Leave delay</span>
+                <span className={cl("count")}>{formatDelay(store.delayMs ?? 0, true)}</span>
             </div>
             <p className={cl("section-desc")}>
                 Wait this long before leaving. If everyone blocked leaves first, the auto-leave is cancelled.
@@ -535,12 +577,17 @@ export default definePlugin({
     start() {
         FluxDispatcher.subscribe("VOICE_STATE_UPDATES", handleVoiceStateUpdate);
 
-        // If we're enabled while already sitting in a call with a blacklisted member, act now.
+        // If we're enabled while already in a call, start the safety poll and act now.
         try {
             const channelId = getCurrentVoiceChannelId();
-            if (channelId && hasBlacklistedUserInChannel(channelId)) {
-                scheduleLeave("Blacklisted user in the call");
-            }
+            if (!channelId) return;
+
+            const users = parseIdSet(settings.store.blacklistIds);
+            const roles = parseIdSet(settings.store.blacklistRoleIds);
+            if (users.size === 0 && roles.size === 0) return;
+
+            startPolling();
+            evaluateChannel(channelId, users, roles);
         } catch (e) {
             console.error("[AutoLeaveBlacklistVoice] Error during start check:", e);
         }
@@ -549,6 +596,6 @@ export default definePlugin({
     stop() {
         FluxDispatcher.unsubscribe("VOICE_STATE_UPDATES", handleVoiceStateUpdate);
         cancelPendingLeave();
-        clearRecheck();
+        stopPolling();
     }
 });

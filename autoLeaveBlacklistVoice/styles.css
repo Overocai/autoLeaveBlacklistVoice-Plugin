@@ -45,6 +45,24 @@
     background: var(--brand-500, var(--brand-experiment, #5865f2));
 }
 
+.vc-albv-clear-btn {
+    margin-left: 4px;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+    background: transparent;
+    transition: color .15s ease, background .15s ease;
+}
+
+.vc-albv-clear-btn:hover {
+    color: var(--white-500, #fff);
+    background: var(--status-danger, #f23f43);
+}
+
 .vc-albv-section-desc {
     margin: 0 0 12px;
     font-size: 13px;
@@ -79,6 +97,22 @@
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 12px;
+    max-height: 172px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.vc-albv-chips::-webkit-scrollbar {
+    width: 8px;
+}
+
+.vc-albv-chips::-webkit-scrollbar-thumb {
+    border-radius: 4px;
+    background: var(--scrollbar-thin-thumb, var(--background-modifier-accent));
+}
+
+.vc-albv-chips::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .vc-albv-empty {

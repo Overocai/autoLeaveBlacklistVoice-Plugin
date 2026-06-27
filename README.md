@@ -2,7 +2,7 @@
 # AutoLeaveBlacklistVoice
 
 > [!WARNING]
-> **Update to the latest version.** Older builds could occasionally fail to leave the call (especially with the leave delay set to `0`). Fixed as of **June 24, 2026** — re-copy the `autoLeaveBlacklistVoice/` folder and rebuild your client mod.
+> **Update to the latest version.** Older builds could fail to leave the call (especially with the delay set to `0`, or when someone with a blacklisted **role** was already in the call). Fixed as of **June 25, 2026** — re-copy the `autoLeaveBlacklistVoice/` folder and rebuild your client mod.
 
 A [Vencord](https://github.com/Vendicated/Vencord) / [Equicord](https://github.com/Equicord/Equicord) user plugin that automatically disconnects you from voice calls when a blacklisted user — **or anyone with a blacklisted role** — is present.
 
@@ -104,6 +104,10 @@ autoLeaveBlacklistVoice/
 ---
 
 ## Changelog
+
+### June 25, 2026
+- **Fixed (important):** joining a call where a member with a blacklisted **role** was already present could fail to auto-leave — it would only "wake up" once some other voice event happened to fire. The plugin now re-scans on a short timer while you're connected and actively fetches members whose roles aren't cached yet, so role-based matches are caught reliably even in large servers (where member data loads lazily).
+- **UI:** added a **Clear all** button to each list, made the user/role chip lists scrollable so large blacklists don't stretch the panel, and the leave-delay section now shows the current value.
 
 ### June 24, 2026
 - **Fixed:** with a non-zero leave delay the countdown could show ("leaving in 2000ms…") but never actually disconnect. A transient detection miss during the countdown — e.g. a member's roles loading a moment late — was cancelling the pending leave. A scheduled leave is no longer cancelled by a transient check; it simply re-checks once when the timer fires.
